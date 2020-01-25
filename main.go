@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math"
+	"net/http"
 	"net/mail"
 	"net/smtp"
+	"net/url"
 	"strings"
 	"text/template"
 
@@ -156,7 +158,7 @@ var (
 			Argument:  bodyTemplateFile,
 			Shorthand: "T",
 			Default:   "",
-			Usage:     "A template file to use for the body",
+			Usage:     "A template file to use for the body, specified  as fully qualified path or URL (file://, http://, https://)",
 			Value:     &config.BodyTemplateFile,
 		},
 		{
@@ -239,9 +241,9 @@ func checkArgs(_ *corev2.Event) error {
 	if config.Hookout {
 		emailBodyTemplate = "{{.Check.Output}}\n{{range .Check.Hooks}}Hook Name:  {{.Name}}\nHook Command:  {{.Command}}\n\n{{.Output}}\n\n{{end}}"
 	} else if len(config.BodyTemplateFile) > 0 {
-		templateBytes, fileErr := ioutil.ReadFile(config.BodyTemplateFile)
+		templateBytes, fileErr := loadTemplateFile(config.BodyTemplateFile)
 		if fileErr != nil {
-			return fmt.Errorf("failed to read specified template file %s", config.BodyTemplateFile)
+			return fmt.Errorf("failed to read specified template file %s, %v", config.BodyTemplateFile, fileErr)
 		}
 		emailBodyTemplate = string(templateBytes)
 	}
@@ -371,4 +373,39 @@ func (a *loginAuth) Next(fromServer []byte, more bool) ([]byte, error) {
 		}
 	}
 	return nil, nil
+}
+
+func loadTemplateFile(templateFile string) ([]byte, error) {
+
+	// Fix for relative paths on local file system? Sanity says it should
+	// only ever be fully qualifed paths
+	if strings.HasPrefix(templateFile, "/") {
+		templateBytes, _ := ioutil.ReadFile(templateFile)
+		return templateBytes, nil
+	} else if strings.Contains(templateFile, "://") {
+		u, err := url.Parse(templateFile)
+		if err != nil {
+			return nil, err
+		}
+
+		if strings.EqualFold(u.Scheme, "file") {
+			templateBytes, _ := ioutil.ReadFile(u.Path)
+			return templateBytes, nil
+		} else if strings.EqualFold(u.Scheme, "http") || strings.EqualFold(u.Scheme, "https") {
+			resp, err := http.Get(templateFile)
+			if err != nil {
+				return nil, err
+			}
+			defer resp.Body.Close()
+			templateBytes, err := ioutil.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			return templateBytes, nil
+		} else {
+			return nil, fmt.Errorf("Unsupported scheme %v://\n", u.Scheme)
+		}
+	} else {
+		return nil, fmt.Errorf("Not a fully qualified local file or URL: %s\n", templateFile)
+	}
 }

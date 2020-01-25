@@ -28,7 +28,7 @@ Usage:
 
 Flags:
   -a, --authMethod string         The SMTP authentication method, one of 'none', 'plain', or 'login' (default "plain")
-  -T, --bodyTemplateFile string   A template file to use for the body
+  -T, --bodyTemplateFile string   A template file to use for the body, specified  as fully qualified path or URL (file://, http://, https://)
   -l, --enableLoginAuth           [deprecated] Use "login auth" mechanisim
   -f, --fromEmail string          The 'from' email address
   -h, --help                      help for sensu-email-handler
